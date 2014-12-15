@@ -464,6 +464,7 @@ int hash_init(void)
 int hash_add_user_status(char *bdpid,char *user_id,long bdp_no,int status)
 {
     int error;
+    int result;
     int index;
     _user_status *user_rfid;
 /*  mutex */
@@ -478,11 +479,8 @@ int hash_add_user_status(char *bdpid,char *user_id,long bdp_no,int status)
         ALOGE("mutex lock fail error= %d",error);
         return -1;
     }
-    error = hashmap_put(user_hash_map,user_rfid->user_id,user_rfid);
-    if ( error != MAP_OK) {
-        ALOGE("HASH","Hashmap put error =%d", error);
-        return -1;
-    }
+    result = hashmap_put(user_hash_map,user_rfid->user_id,user_rfid);
+
 
 
     error = pthread_mutex_unlock(&hash_map_mutex);
@@ -491,7 +489,10 @@ int hash_add_user_status(char *bdpid,char *user_id,long bdp_no,int status)
 
     }
 
-
+    if ( result != MAP_OK) {
+        ALOGE("HASH","Hashmap put error =%d", result);
+        return -1;
+    }
     return 0;
 }
 
@@ -502,7 +503,24 @@ int hash_add_user_status(char *bdpid,char *user_id,long bdp_no,int status)
 
 int hash_has_element(char *user_id)
 {
+    _user_status *user_rfid;
+    int error;
+    int result;
+    error = pthread_mutex_lock(&hash_map_mutex);
+    if ( 0 != error) {
+        ALOGE("mutex lock fail error= %d",error);
+        return -1;
+    }
+    result = hashmap_get(user_hash_map,user_id,(void **)(&user_rfid));
 
+
+    error = pthread_mutex_unlock(&hash_map_mutex);
+    if ( 0 != error) {
+        ALOGE("mutex unlock fail error= %d",error);
+
+    }
+
+    return 0;
 
 }
 /*
@@ -512,6 +530,29 @@ int hash_has_element(char *user_id)
 
 int hash_remove_user_status(char *user_id)
 {
+    int error;
+    int result;
+    error = pthread_mutex_lock(&hash_map_mutex);
+    if ( 0 != error) {
+        ALOGE("mutex lock fail error= %d",error);
+        return -1;
+    }
+
+
+
+    error = pthread_mutex_unlock(&hash_map_mutex);
+    if ( 0 != error) {
+        ALOGE("mutex unlock fail error= %d",error);
+
+    }
+
+    result = hashmap_remove(user_hash_map,user_id);
+    if ( result != MAP_OK) {
+        ALOGE("HASH","Hashmap put error =%d", result);
+        return -1;
+    }
+
+    return 0;
 }
 
 /*
