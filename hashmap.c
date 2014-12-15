@@ -17,6 +17,7 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <sys/time.h>
+#include "logger.h"
 
 
 #define INITIAL_SIZE (256)
@@ -482,6 +483,8 @@ int hash_add_user_status(char *bdpid,char *user_id,char *bike_id,long bdp_no,int
     }
     strncpy(user_rfid->bdp_id,bdpid,32);
     strncpy(user_rfid->user_id,user_id,32);
+    strncpy(user_rfid->bike_id,bike_id,32);
+
     gettimeofday(&user_rfid->timestamp,0);
     user_rfid->status = status;
 
@@ -493,19 +496,20 @@ int hash_add_user_status(char *bdpid,char *user_id,char *bike_id,long bdp_no,int
 
     error = pthread_mutex_lock(&hash_map_mutex);
     if ( 0 != error) {
-        ALOGE("mutex lock fail error= %d",error);
+        ALOGE("HASH","mutex lock fail error= %d",error);
         return -1;
     }
     result = hashmap_put(user_hash_map,user_rfid->user_id,user_rfid);
     if ( MAP_OK == result ) {
     /* put bike rfid into hash map */
+        ALOGD("HASH","Put bike id = %s into bike hash map ",bike_id);
         result = hashmap_put(bike_hash_map,bike_id,bike_rfid);
     }
 
 
     error = pthread_mutex_unlock(&hash_map_mutex);
     if ( 0 != error) {
-        ALOGE("mutex unlock fail error= %d",error);
+        ALOGE("HASH","mutex unlock fail error= %d",error);
 
     }
 
@@ -528,7 +532,7 @@ int hash_has_element(char *user_id)
     int result;
     error = pthread_mutex_lock(&hash_map_mutex);
     if ( 0 != error) {
-        ALOGE("mutex lock fail error= %d",error);
+        ALOGE("HASH","mutex lock fail error= %d",error);
         return -1;
     }
     result = hashmap_get(user_hash_map,user_id,(void **)(&user_rfid));
@@ -536,7 +540,7 @@ int hash_has_element(char *user_id)
 
     error = pthread_mutex_unlock(&hash_map_mutex);
     if ( 0 != error) {
-        ALOGE("mutex unlock fail error= %d",error);
+        ALOGE("HASH","mutex unlock fail error= %d",error);
 
     }
 
@@ -559,6 +563,7 @@ int hash_remove_user_map(char *user_id,char *bike_id)
         result = hashmap_remove(user_hash_map,user_id);
         if ( MAP_OK == result)
             free(user_rfid);
+        ALOGD("HASH","Remove rfid %s from user hash map",user_id);
         return result;
     }
 
@@ -573,12 +578,13 @@ int hash_remove_bike_map(char *bike_id,char *user_id)
    int result;
 
     struct _bike_status *bike_rfid;
-    result = hashmap_get(bike_hash_map,user_id,(void **)(&bike_rfid));
+    result = hashmap_get(bike_hash_map,bike_id,(void **)(&bike_rfid));
     if ( MAP_OK == result) {
         strncpy(user_id,bike_rfid->user_id,32);
-        result = hashmap_remove(bike_hash_map,user_id);
+        result = hashmap_remove(bike_hash_map,bike_id);
         if ( MAP_OK == result)
             free(bike_rfid);
+         ALOGD("HASH","Remove rfid %s from bike hash map",bike_id);
         return result;
     }
 
@@ -600,24 +606,26 @@ int hash_remove_user_status(char *user_id)
 
     error = pthread_mutex_lock(&hash_map_mutex);
     if ( 0 != error) {
-        ALOGE("mutex lock fail error= %d",error);
+        ALOGE("HASH","mutex lock fail error= %d",error);
         return -1;
     }
 
+    ALOGI("HASH","remove %s from user hash map",user_id);
     /* first remove elment from user hash map */
 
     memset(bike_id,0,32+1);
     result = hash_remove_user_map(user_id,bike_id);
-
+    ALOGD("HASH","Remove rfid from user hash map = %d bike id = %s",result,bike_id)
 
     if (MAP_OK == result) {
         result = hash_remove_bike_map(bike_id,userid);
+        ALOGD("HASH","Remove rfid from bike hash map = %d",result)
     }
 
 
     error = pthread_mutex_unlock(&hash_map_mutex);
     if ( 0 != error) {
-        ALOGE("mutex unlock fail error= %d",error);
+        ALOGE("HASH","mutex unlock fail error= %d",error);
 
     }
 
@@ -645,7 +653,7 @@ int hash_remove_bike_status(char *bike_id)
 
     error = pthread_mutex_lock(&hash_map_mutex);
     if ( 0 != error) {
-        ALOGE("mutex lock fail error= %d",error);
+        ALOGE("HASH","mutex lock fail error= %d",error);
         return -1;
     }
 
@@ -662,7 +670,7 @@ int hash_remove_bike_status(char *bike_id)
 
     error = pthread_mutex_unlock(&hash_map_mutex);
     if ( 0 != error) {
-        ALOGE("mutex unlock fail error= %d",error);
+        ALOGE("HASH","mutex unlock fail error= %d",error);
 
     }
 

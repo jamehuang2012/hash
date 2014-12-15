@@ -1,6 +1,6 @@
 CC      := gcc
 LD      := ld
-LDFLAGS := -shared -fpic -lrt  -L../logger -llogger
+LDFLAGS := -shared -fpic -lrt   -L../logger -llogger
 
 TOP =..
 OBJS =  hashmap.o 
@@ -8,11 +8,12 @@ TARGET:= libhashmap.so
 #ARCH=arm
 
 
-CFLAGS += -I$(TOP)/include
+CFLAGS += -I$(TOP)/include -I../logger
 CFLAGS += -I$(TOP)/src
 CFLAGS += -pthread -D_GNU_SOURCE
 CFLAGS += $(INCLUDE_PATH)
 CFLAGS += -fPIC
+CFLAGS += -DDEBUG
 # Default architecture is x86
 ARCH ?= x86
 
