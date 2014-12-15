@@ -1,6 +1,6 @@
 CC      := gcc
 LD      := ld
-LDFLAGS := -shared -fpic -lrt 
+LDFLAGS := -shared -fpic -lrt  -L../logger -llogger
 
 TOP =..
 OBJS =  hashmap.o 

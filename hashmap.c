@@ -16,7 +16,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <pthread.h>
-#include <sys/timer.h>
+#include <sys/time.h>
 
 
 #define INITIAL_SIZE (256)
@@ -411,16 +411,17 @@ int hashmap_length(map_t in){
 
 /* proviate interface for scu */
 
-typedef struct _user_status{
+struct _user_status{
 
 	char user_id[32];
-	char bdp_no[32];
-	long bdp_id;
+	char bdp_id[32];
+	char bike_id[32];
+	long bdp_no;
     struct timeval timestamp;
 	int  status;    /* 0 waiting for uploading, 1 uploaded*/
 };
 
-typedef struct _bike_status {
+struct _bike_status {
 	char bike_rfid[32];
 	char user_id[32];
 	struct timeval timestamp;
@@ -437,10 +438,15 @@ static pthread_mutex_t hash_map_mutex = PTHREAD_MUTEX_INITIALIZER;
 void hash_init_routine(void)
 {
 
-	user_map = hashmap_new();
-	ALOGI("HASH", "start hash table for caching the user status");
-
-
+	user_hash_map = hashmap_new();
+	if ( user_hash_map == NULL) {
+        ALOGE("HASH","Failed to created user hash map");
+	}
+    bike_hash_map = hashmap_new();
+    if (NULL == bike_hash_map) {
+        ALOGE("HASH", " Failed to created bike hash map");
+    }
+    ALOGI("HASH", "start hash table for caching the user status");
 }
 
 int hash_init(void)
@@ -461,18 +467,29 @@ int hash_init(void)
 * Cache the Bike rfid
 */
 
-int hash_add_user_status(char *bdpid,char *user_id,long bdp_no,int status)
+int hash_add_user_status(char *bdpid,char *user_id,char *bike_id,long bdp_no,int status)
 {
     int error;
     int result;
     int index;
-    _user_status *user_rfid;
+    struct _user_status *user_rfid;
+    struct _bike_status *bike_rfid;
 /*  mutex */
-    user_rfid = calloc(sizeof(_user_status));
+    user_rfid = calloc(sizeof(char),sizeof(struct _user_status));
+
+    if (NULL == user_rfid) {
+        ALOGE("HASH","Failed to malloc memory");
+    }
     strncpy(user_rfid->bdp_id,bdpid,32);
     strncpy(user_rfid->user_id,user_id,32);
-    gettimeofday(&user_rfid->timestamp,0)
+    gettimeofday(&user_rfid->timestamp,0);
     user_rfid->status = status;
+
+    bike_rfid = calloc(sizeof(char),sizeof(struct _bike_status));
+    strncpy(bike_rfid->bike_rfid,bike_id,32);
+    strncpy(bike_rfid->user_id,user_id,32);
+
+
 
     error = pthread_mutex_lock(&hash_map_mutex);
     if ( 0 != error) {
@@ -480,7 +497,10 @@ int hash_add_user_status(char *bdpid,char *user_id,long bdp_no,int status)
         return -1;
     }
     result = hashmap_put(user_hash_map,user_rfid->user_id,user_rfid);
-
+    if ( MAP_OK == result ) {
+    /* put bike rfid into hash map */
+        result = hashmap_put(bike_hash_map,bike_id,bike_rfid);
+    }
 
 
     error = pthread_mutex_unlock(&hash_map_mutex);
@@ -503,7 +523,7 @@ int hash_add_user_status(char *bdpid,char *user_id,long bdp_no,int status)
 
 int hash_has_element(char *user_id)
 {
-    _user_status *user_rfid;
+    struct _user_status *user_rfid;
     int error;
     int result;
     error = pthread_mutex_lock(&hash_map_mutex);
@@ -520,9 +540,52 @@ int hash_has_element(char *user_id)
 
     }
 
+    if ( MAP_OK != result ) {
+        return -1;
+    }
+
     return 0;
 
 }
+
+int hash_remove_user_map(char *user_id,char *bike_id)
+{
+    int result;
+
+    struct _user_status *user_rfid;
+    result = hashmap_get(user_hash_map,user_id,(void **)(&user_rfid));
+    if ( MAP_OK == result) {
+        strncpy(bike_id,user_rfid->bike_id,32);
+        result = hashmap_remove(user_hash_map,user_id);
+        if ( MAP_OK == result)
+            free(user_rfid);
+        return result;
+    }
+
+    return result;
+
+}
+
+
+
+int hash_remove_bike_map(char *bike_id,char *user_id)
+{
+   int result;
+
+    struct _bike_status *bike_rfid;
+    result = hashmap_get(bike_hash_map,user_id,(void **)(&bike_rfid));
+    if ( MAP_OK == result) {
+        strncpy(user_id,bike_rfid->user_id,32);
+        result = hashmap_remove(bike_hash_map,user_id);
+        if ( MAP_OK == result)
+            free(bike_rfid);
+        return result;
+    }
+
+    return result;
+
+}
+
 /*
 * Remove user rfid hash item from user hash table ,
 * also remove the bike rfid from bike hash table
@@ -532,12 +595,24 @@ int hash_remove_user_status(char *user_id)
 {
     int error;
     int result;
+    char bike_id[32+1];
+    char userid[32+1];
+
     error = pthread_mutex_lock(&hash_map_mutex);
     if ( 0 != error) {
         ALOGE("mutex lock fail error= %d",error);
         return -1;
     }
 
+    /* first remove elment from user hash map */
+
+    memset(bike_id,0,32+1);
+    result = hash_remove_user_map(user_id,bike_id);
+
+
+    if (MAP_OK == result) {
+        result = hash_remove_bike_map(bike_id,userid);
+    }
 
 
     error = pthread_mutex_unlock(&hash_map_mutex);
@@ -546,23 +621,57 @@ int hash_remove_user_status(char *user_id)
 
     }
 
-    result = hashmap_remove(user_hash_map,user_id);
     if ( result != MAP_OK) {
-        ALOGE("HASH","Hashmap put error =%d", result);
+        ALOGE("HASH","Hashmap remove error =%d", result);
         return -1;
     }
+
 
     return 0;
 }
 
+
 /*
-* update stauts to "uploaded"
-* start timer to delay some period time
-* to remove the rfid from hash table
+* Remove bike rfid hash item from bike hash table ,
+* also remove the bike rfid from bike hash table
 */
-int hash_update_user_stauts(char *user_id,int status)
+
+int hash_remove_bike_status(char *bike_id)
 {
+    int error;
+    int result;
+    char bikeid[32+1];
+    char userid[32+1];
 
+    error = pthread_mutex_lock(&hash_map_mutex);
+    if ( 0 != error) {
+        ALOGE("mutex lock fail error= %d",error);
+        return -1;
+    }
+
+    /* first remove elment from user hash map */
+
+    memset(userid,0,32+1);
+    result = hash_remove_bike_map(bike_id,userid);
+
+
+    if (MAP_OK == result) {
+        result = hash_remove_user_map(userid,bikeid);
+    }
+
+
+    error = pthread_mutex_unlock(&hash_map_mutex);
+    if ( 0 != error) {
+        ALOGE("mutex unlock fail error= %d",error);
+
+    }
+
+    if ( result != MAP_OK) {
+        ALOGE("HASH","Hashmap remove error =%d", result);
+        return -1;
+    }
+
+
+    return 0;
 }
-
 
